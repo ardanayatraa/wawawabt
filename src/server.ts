@@ -48,7 +48,6 @@ await app.register(multipart, {
 });
 
 const wa = new WhatsAppService(config.authDir);
-await wa.start();
 await registerAdminRoutes(app, wa);
 await registerRoutes(app, wa);
 
@@ -61,3 +60,7 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 await app.listen({ port: config.port, host: config.host });
+
+void wa.start().catch(error => {
+  app.log.error({ err: error }, 'WhatsApp startup failed');
+});

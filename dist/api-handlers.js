@@ -17,6 +17,10 @@ const allowedMediaTypes = new Set([
     'audio/ogg'
 ]);
 export const getSessionStatus = (wa) => async () => wa.getStatus();
+export const startSession = (wa) => async () => {
+    await wa.start();
+    return { ok: true, status: wa.getStatus() };
+};
 export const getSessionQr = (wa) => async (request, reply) => {
     const status = wa.getStatus();
     if (!status.qrDataUrl) {

@@ -7,7 +7,8 @@ import {
   getSessionStatus,
   logoutSession,
   sendMediaMessage,
-  sendTextMessage
+  sendTextMessage,
+  startSession
 } from './api-handlers.js';
 import { config } from './config.js';
 import type { WhatsAppService } from './whatsapp.js';
@@ -499,6 +500,16 @@ const appHtml = (maxUploadMb: number) => String.raw`<!doctype html>
       }, 4200);
     }
 
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[char]));
+    }
+
     async function api(path, options) {
       const response = await fetch(path, options);
       const contentType = response.headers.get('content-type') || '';
@@ -530,9 +541,16 @@ const appHtml = (maxUploadMb: number) => String.raw`<!doctype html>
         qrBox.innerHTML = '<div class="empty">WhatsApp sudah terhubung.</div>';
       } else if (status.hasQr) {
         qrBox.innerHTML = '<img src="/admin/api/session/qr.png?ts=' + Date.now() + '" alt="QR WhatsApp">';
+      } else if (status.lastError) {
+        qrBox.innerHTML = '<div class="empty">WhatsApp gagal start: ' + escapeHtml(status.lastError) + '</div>';
       } else {
         qrBox.innerHTML = '<div class="empty">QR belum tersedia. Tunggu beberapa detik lalu refresh.</div>';
       }
+    }
+
+    async function startSession() {
+      await api('/admin/api/session/start', { method: 'POST' });
+      await refreshStatus();
     }
 
     async function submitJson(form, path) {
@@ -578,7 +596,7 @@ const appHtml = (maxUploadMb: number) => String.raw`<!doctype html>
     }
 
     document.querySelector('#refreshBtn').addEventListener('click', () => refreshStatus().catch(error => showToast(error.message, true)));
-    document.querySelector('#reloadQrBtn').addEventListener('click', () => refreshStatus().catch(error => showToast(error.message, true)));
+    document.querySelector('#reloadQrBtn').addEventListener('click', () => startSession().catch(error => showToast(error.message, true)));
     document.querySelector('#logoutBtn').addEventListener('click', async () => {
       await api('/admin/logout', { method: 'POST' });
       location.href = '/admin';
@@ -646,6 +664,7 @@ export const registerAdminRoutes = async (app: FastifyInstance, wa: WhatsAppServ
     admin.get('/admin/api/session/status', getSessionStatus(wa));
     admin.get('/admin/api/session/qr', getSessionQr(wa));
     admin.get('/admin/api/session/qr.png', getSessionQrPng(wa));
+    admin.post('/admin/api/session/start', startSession(wa));
     admin.post('/admin/api/session/logout', logoutSession(wa));
     admin.post('/admin/api/messages/text', sendTextMessage(wa));
     admin.post('/admin/api/messages/media', sendMediaMessage(wa));

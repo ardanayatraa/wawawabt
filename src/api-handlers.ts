@@ -23,6 +23,11 @@ const allowedMediaTypes = new Set([
 
 export const getSessionStatus = (wa: WhatsAppService) => async () => wa.getStatus();
 
+export const startSession = (wa: WhatsAppService) => async () => {
+  await wa.start();
+  return { ok: true, status: wa.getStatus() };
+};
+
 export const getSessionQr = (wa: WhatsAppService) => async (request: FastifyRequest, reply: FastifyReply) => {
   const status = wa.getStatus();
 

@@ -34,53 +34,74 @@ export class WhatsAppService {
   private connection: ConnectionState = 'starting';
   private qr?: string;
   private qrDataUrl?: string;
+  private lastError?: string;
   private reconnecting = false;
   private readonly queue = new PQueue({ concurrency: 1, interval: 1000, intervalCap: 4 });
 
   constructor(private readonly authDir: string) {}
 
   async start() {
+    if (this.connection === 'open' || this.connection === 'connecting') {
+      return;
+    }
+
     this.connection = 'connecting';
-    const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
-    const { version } = await fetchLatestBaileysVersion();
+    this.lastError = undefined;
 
-    const socket = makeWASocket({
-      version,
-      browser: Browsers.ubuntu('Chrome'),
-      printQRInTerminal: false,
-      logger,
-      auth: {
-        creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, logger)
-      }
-    });
+    try {
+      const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
+      const { version } = await fetchLatestBaileysVersion();
 
-    this.socket = socket;
-    socket.ev.on('creds.update', saveCreds);
-    socket.ev.on('connection.update', async update => {
-      if (update.qr) {
-        this.qr = update.qr;
-        this.qrDataUrl = await QRCode.toDataURL(update.qr);
-      }
-
-      if (update.connection) {
-        this.connection = update.connection;
-      }
-
-      if (update.connection === 'open') {
-        this.qr = undefined;
-        this.qrDataUrl = undefined;
-      }
-
-      if (update.connection === 'close') {
-        const statusCode = (update.lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-
-        if (shouldReconnect) {
-          await this.reconnect();
+      const socket = makeWASocket({
+        version,
+        browser: Browsers.ubuntu('Chrome'),
+        printQRInTerminal: false,
+        logger,
+        auth: {
+          creds: state.creds,
+          keys: makeCacheableSignalKeyStore(state.keys, logger)
         }
-      }
-    });
+      });
+
+      this.socket = socket;
+      socket.ev.on('creds.update', saveCreds);
+      socket.ev.on('connection.update', async update => {
+        if (update.qr) {
+          this.qr = update.qr;
+          this.qrDataUrl = await QRCode.toDataURL(update.qr);
+          this.lastError = undefined;
+        }
+
+        if (update.connection) {
+          this.connection = update.connection;
+        }
+
+        if (update.connection === 'open') {
+          this.qr = undefined;
+          this.qrDataUrl = undefined;
+          this.lastError = undefined;
+        }
+
+        if (update.connection === 'close') {
+          const statusCode = (update.lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
+          const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+
+          if (shouldReconnect) {
+            void this.reconnect();
+          } else {
+            this.lastError = 'Session WhatsApp logout. Scan QR ulang untuk menyambungkan.';
+          }
+        }
+      });
+    } catch (error) {
+      this.socket = undefined;
+      this.connection = 'close';
+      this.qr = undefined;
+      this.qrDataUrl = undefined;
+      this.lastError = this.errorMessage(error);
+      logger.error({ err: error }, 'Failed to start WhatsApp socket');
+      throw error;
+    }
   }
 
   getStatus() {
@@ -88,7 +109,8 @@ export class WhatsAppService {
       connection: this.connection,
       hasQr: Boolean(this.qr),
       qr: this.qr,
-      qrDataUrl: this.qrDataUrl
+      qrDataUrl: this.qrDataUrl,
+      lastError: this.lastError
     };
   }
 
@@ -117,6 +139,7 @@ export class WhatsAppService {
     this.connection = 'close';
     this.qr = undefined;
     this.qrDataUrl = undefined;
+    this.lastError = undefined;
   }
 
   private async reconnect() {
@@ -128,9 +151,16 @@ export class WhatsAppService {
     try {
       await new Promise(resolve => setTimeout(resolve, 2000));
       await this.start();
+    } catch (error) {
+      this.lastError = this.errorMessage(error);
+      logger.error({ err: error }, 'WhatsApp reconnect failed');
     } finally {
       this.reconnecting = false;
     }
+  }
+
+  private errorMessage(error: unknown) {
+    return error instanceof Error ? error.message : String(error);
   }
 
   private requireSocket() {

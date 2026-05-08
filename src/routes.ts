@@ -7,7 +7,8 @@ import {
   getSessionStatus,
   logoutSession,
   sendMediaMessage,
-  sendTextMessage
+  sendTextMessage,
+  startSession
 } from './api-handlers.js';
 
 const requireApiKey = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -26,6 +27,7 @@ export const registerRoutes = async (app: FastifyInstance, wa: WhatsAppService) 
     api.get('/api/session/status', getSessionStatus(wa));
     api.get('/api/session/qr', getSessionQr(wa));
     api.get('/api/session/qr.png', getSessionQrPng(wa));
+    api.post('/api/session/start', startSession(wa));
     api.post('/api/session/logout', logoutSession(wa));
     api.post('/api/messages/text', sendTextMessage(wa));
     api.post('/api/messages/media', sendMediaMessage(wa));
