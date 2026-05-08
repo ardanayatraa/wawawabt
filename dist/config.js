@@ -6,9 +6,16 @@ const optionalNumber = (value, fallback) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
 };
+const normalizeHost = (value) => {
+    const host = value?.trim();
+    if (!host || host.toLowerCase() === 'o.o.o.o') {
+        return '0.0.0.0';
+    }
+    return host;
+};
 export const config = {
     port: optionalNumber(process.env.PORT, 3000),
-    host: process.env.HOST || '0.0.0.0',
+    host: normalizeHost(process.env.HOST),
     apiKey: process.env.API_KEY,
     adminPassword: process.env.ADMIN_PASSWORD || '',
     adminSessionSecret: process.env.ADMIN_SESSION_SECRET || process.env.API_KEY || '',
